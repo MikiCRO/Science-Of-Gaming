@@ -11,9 +11,9 @@ def fetch_games():
     all_games = []
     page = 1
 
-    while page <= 25:  # 10 pages x 40 games = 400 games total
+    while page <= 25:
         print(f"Fetching page {page}...")
-        
+
         params = {
             "key": API_KEY,
             "ordering": "-rating",
@@ -30,11 +30,19 @@ def fetch_games():
         data = response.json()
 
         for game in data["results"]:
-            # Extract genres as a comma separated string
             genres = ", ".join([g["name"] for g in game.get("genres", [])])
-            
-            # Extract platforms as a comma separated string
             platforms = ", ".join([p["platform"]["name"] for p in game.get("platforms", [])])
+
+            # Extract singleplayer/multiplayer from tags
+            tags = [t["name"].lower() for t in game.get("tags", [])]
+            if "singleplayer" in tags and "multiplayer" in tags:
+                play_mode = "Both"
+            elif "multiplayer" in tags:
+                play_mode = "Multiplayer"
+            elif "singleplayer" in tags:
+                play_mode = "Singleplayer"
+            else:
+                play_mode = "Unknown"
 
             all_games.append({
                 "name": game["name"],
@@ -44,11 +52,11 @@ def fetch_games():
                 "platforms": platforms,
                 "metacritic": game.get("metacritic", "N/A"),
                 "playtime": game.get("playtime", "N/A"),
+                "play_mode": play_mode,
             })
 
         page += 1
 
-    # Save to CSV
     with open("data/games.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=all_games[0].keys())
         writer.writeheader()
