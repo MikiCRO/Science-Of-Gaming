@@ -6,20 +6,24 @@ from dotenv import load_dotenv
 load_dotenv()
 API_KEY = os.getenv("RAWG_API_KEY")
 
-def fetch_games():
+def fetch_games(ordering, output_file, metacritic_only=False):
     url = "https://api.rawg.io/api/games"
     all_games = []
     page = 1
 
     while page <= 25:
-        print(f"Fetching page {page}...")
+        print(f"Fetching {output_file} - page {page}...")
 
         params = {
             "key": API_KEY,
-            "ordering": "-rating",
+            "ordering": ordering,
             "page_size": 40,
-            "page": page
+            "page": page,
+            "exclude_additions": True
         }
+
+        if metacritic_only:
+            params["metacritic"] = "1,100"
 
         response = requests.get(url, params=params)
 
@@ -30,16 +34,28 @@ def fetch_games():
         data = response.json()
 
         for game in data["results"]:
-            genres = ", ".join([g["name"] for g in game.get("genres", [])])
-            platforms = ", ".join([p["platform"]["name"] for p in game.get("platforms", [])])
+            genres = ", ".join([g["name"] for g in game.get("genres", []) or []])
+            platforms = ", ".join([p["platform"]["name"] for p in game.get("platforms", []) or []])
+            tags = [t["name"].lower() for t in game.get("tags", []) or []]
+            genres_list = [g["name"].lower() for g in game.get("genres", []) or []]
 
-            # Extract singleplayer/multiplayer from tags
-            tags = [t["name"].lower() for t in game.get("tags", [])]
-            if "singleplayer" in tags and "multiplayer" in tags:
+            is_multiplayer = (
+                "multiplayer" in tags or
+                "massively multiplayer" in genres_list or
+                "co-op" in tags or
+                "online co-op" in tags or
+                "pvp" in tags
+            )
+            is_singleplayer = (
+                "singleplayer" in tags or
+                "single-player" in tags
+            )
+
+            if is_singleplayer and is_multiplayer:
                 play_mode = "Both"
-            elif "multiplayer" in tags:
+            elif is_multiplayer:
                 play_mode = "Multiplayer"
-            elif "singleplayer" in tags:
+            elif is_singleplayer:
                 play_mode = "Singleplayer"
             else:
                 play_mode = "Unknown"
@@ -57,11 +73,22 @@ def fetch_games():
 
         page += 1
 
-    with open("data/games.csv", "w", newline="", encoding="utf-8") as f:
+    with open(f"data/{output_file}", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=all_games[0].keys())
         writer.writeheader()
         writer.writerows(all_games)
 
-    print(f"Done! Saved {len(all_games)} games to data/games.csv")
+    print(f"Done! Saved {len(all_games)} games to data/{output_file}")
 
-fetch_games()
+# Fetch top 1000 by RAWG community rating
+fetch_games(
+    ordering="-rating",
+    output_file="games_rated.csv"
+)
+
+# Fetch top 1000 by Metacritic score (all have metacritic scores)
+fetch_games(
+    ordering="-metacritic",
+    output_file="games_metacritic.csv",
+    metacritic_only=True
+)
